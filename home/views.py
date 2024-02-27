@@ -1,11 +1,53 @@
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from home.serializers import PeopleSerializer , LoginSerializer
+from home.serializers import PeopleSerializer , LoginSerializer, RegisterSerializer
 from home.models import Person
-
 from turtle import color
 from functools import partial
 from rest_framework.views import APIView
+from rest_framework import viewsets , status
+from django.contrib.auth.models import User
+from django.contrib.auth import authenticate
+from rest_framework.authtoken.models import Token
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.authentication import TokenAuthentication, BasicAuthentication
+from django.core.paginator import Paginator
+
+
+class LoginAPI(APIView):
+    
+    def post(self, request):
+        data = request.data
+        serializer = LoginSerializer(data = data)
+        if not serializer.is_valid():
+            return Response({
+                'status': False,
+                'message': serializer.errors
+            }, status.HTTP_400_BAD_REQUEST)
+        
+        
+        user = authenticate(username= serializer.data['username'], password= serializer.data['password'])
+        if not user:
+            return Response({
+                'status': False,
+                'message': 'invalid credentials'
+            }, status.HTTP_400_BAD_REQUEST)
+        token = Token.objects.get_or_create(user=user)
+        return Response({'status': True, 'message': 'user login', 'token':str(token)}, status.HTTP_201_CREATED)
+
+class RegisterAPI(APIView):
+    def post(self, request):
+        data = request.data
+        serializer = RegisterSerializer(data =data)
+        
+        if not serializer.is_valid():
+            return Response({
+                'status': False,
+                'message': serializer.errors
+            }, status.HTTP_400_BAD_REQUEST)
+        
+        serializer.save()
+        return Response({'status': True, 'message': 'user created'}, status.HTTP_201_CREATED)
 
 # Create your views here.
 
@@ -48,11 +90,24 @@ def login(request):
 
 
 class PersonAPI(APIView):
+    permission_classes = [IsAuthenticated]
+    authentication_classes = [TokenAuthentication]
     
     def get(self,  request):
-        objs = Person.objects.filter(color__isnull=False)
-        serializer = PeopleSerializer(objs, many =True)
-        return Response(serializer.data)
+        try:
+            print(request.user)
+            objs = Person.objects.all()
+            page = request.GET.get('page', 1)
+            page_size = 3
+        
+            paginator = Paginator(objs, page_size)
+        
+            serializer = PeopleSerializer(paginator.page(page), many =True)
+            return Response(serializer.data)
+
+        except:
+            return Response({'status':False,
+                             'message':'invalid page number'})
     
     def post(self, request):
         data=request.data
@@ -126,3 +181,18 @@ def person(request):
         obj = Person.objects.get(id=data['id'])
         obj.delete()
         return Response({'message':'Person was deleted'})
+    
+    
+class PeopleViewSet(viewsets.ModelViewSet):
+    serializer_class = PeopleSerializer
+    queryset = Person.objects.all()
+    
+    def list(self, request):
+        search = request.GET.get('search')
+        queryset = self.queryset
+        if search:
+            queryset = queryset.filter(name__startswith = search)
+        
+        serializer = PeopleSerializer(queryset, many=True)
+                                 
+        return Response({'status':200, 'data':serializer.data})
