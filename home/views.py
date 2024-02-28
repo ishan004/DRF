@@ -2,8 +2,6 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from home.serializers import PeopleSerializer , LoginSerializer, RegisterSerializer
 from home.models import Person
-from turtle import color
-from functools import partial
 from rest_framework.views import APIView
 from rest_framework import viewsets , status
 from django.contrib.auth.models import User
@@ -12,6 +10,7 @@ from rest_framework.authtoken.models import Token
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.authentication import TokenAuthentication, BasicAuthentication
 from django.core.paginator import Paginator
+from rest_framework.decorators import action
 
 
 class LoginAPI(APIView):
@@ -186,6 +185,7 @@ def person(request):
 class PeopleViewSet(viewsets.ModelViewSet):
     serializer_class = PeopleSerializer
     queryset = Person.objects.all()
+    http_method_names = ['get', 'post']
     
     def list(self, request):
         search = request.GET.get('search')
@@ -196,3 +196,15 @@ class PeopleViewSet(viewsets.ModelViewSet):
         serializer = PeopleSerializer(queryset, many=True)
                                  
         return Response({'status':200, 'data':serializer.data})
+    
+
+    @action(detail=True, methods=['post'])
+    def send_mail_to_person(self,request, pk):
+        obj = Person.objects.get(pk=pk)
+        serializer = PeopleSerializer(obj)
+        
+        return Response({
+            'status':True,
+            'message': 'Email sent successfully',
+            'data': serializer.data
+        })
